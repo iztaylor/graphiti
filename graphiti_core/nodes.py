@@ -481,7 +481,7 @@ class EntityNode(Node):
             # Serialize complex attributes for Neo4j compatibility
             serialized_attributes = serialize_attributes_for_neo4j(self.attributes or {})
             entity_data.update(serialized_attributes)
-            labels = ':'.join(self.labels + ['Entity', 'Entity_' + self.group_id.replace('-', '')])
+            labels = ':'.join(self.labels + ['Entity'])
 
             if driver.aoss_client:
                 driver.save_to_aoss('entities', [entity_data])  # pyright: ignore reportAttributeAccessIssue

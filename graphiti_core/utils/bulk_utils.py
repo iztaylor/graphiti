@@ -179,9 +179,6 @@ async def add_nodes_and_edges_bulk_tx(
             # Serialize complex attributes for Neo4j compatibility
             serialized_attributes = serialize_attributes_for_neo4j(node.attributes or {})
             entity_data.update(serialized_attributes)
-            entity_data['labels'] = list(
-                set(node.labels + ['Entity', 'Entity_' + node.group_id.replace('-', '')])
-            )
 
         nodes.append(entity_data)
 

@@ -60,7 +60,7 @@ class IsMemberOf(BaseModel):
 
 
 class IsGitOpsRepoFile(BaseModel):
-    """A relationship between a parent and a child"""
+    """A relationship between a parent and a child  """
 
     file_path: Optional[str] = Field('', description='The file path of the resource in the GitRepo')
     github_link: Optional[str] = Field('', description='The GitHub link of the resource')
