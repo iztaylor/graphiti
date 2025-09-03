@@ -381,7 +381,12 @@ async def extract_attributes_from_node(
     )
 
     if entity_type is not None:
-        entity_type(**llm_response)
+        try:
+            logger.info(f'Validating entity type: {entity_type} from {llm_response}')
+            entity_type(**llm_response)
+        except Exception as e:
+            logger.error(f'Error validating entity type: {e}')
+            raise e
 
     node.summary = summary_response.get('summary', '')
     node_attributes = {key: value for key, value in llm_response.items()}

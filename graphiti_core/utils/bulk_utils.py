@@ -56,6 +56,42 @@ logger = logging.getLogger(__name__)
 CHUNK_SIZE = 10
 
 
+def serialize_attributes_for_neo4j(attributes: dict[str, Any]) -> dict[str, Any]:
+    """
+    Serialize complex attributes for Neo4j storage.
+    Neo4j only supports primitive types (str, int, float, bool, list of primitives).
+    Complex nested objects must be serialized to JSON strings.
+    """
+    if not attributes:
+        return {}
+    
+    serialized = {}
+    for key, value in attributes.items():
+        if value is None:
+            serialized[key] = None
+        elif isinstance(value, (str, int, float, bool)):
+            serialized[key] = value
+        elif isinstance(value, list):
+            # Check if list contains only primitive types
+            if all(isinstance(item, (str, int, float, bool, type(None))) for item in value):
+                serialized[key] = value
+            else:
+                # Serialize complex list to JSON string
+                serialized[key] = json.dumps(value)
+        elif isinstance(value, dict):
+            # Serialize dict to JSON string
+            serialized[key] = json.dumps(value)
+        else:
+            # Serialize any other complex type to JSON string
+            try:
+                serialized[key] = json.dumps(value)
+            except (TypeError, ValueError):
+                # If serialization fails, convert to string
+                serialized[key] = str(value)
+    
+    return serialized
+
+
 class RawEpisode(BaseModel):
     name: str
     uuid: str | None = Field(default=None)
@@ -141,7 +177,9 @@ async def add_nodes_and_edges_bulk_tx(
             attributes = convert_datetimes_to_strings(node.attributes) if node.attributes else {}
             entity_data['attributes'] = json.dumps(attributes)
         else:
-            entity_data.update(node.attributes or {})
+            # Serialize complex attributes for Neo4j compatibility
+            serialized_attributes = serialize_attributes_for_neo4j(node.attributes or {})
+            entity_data.update(serialized_attributes)
             entity_data['labels'] = list(
                 set(node.labels + ['Entity', 'Entity_' + node.group_id.replace('-', '')])
             )
@@ -171,7 +209,9 @@ async def add_nodes_and_edges_bulk_tx(
             attributes = convert_datetimes_to_strings(edge.attributes) if edge.attributes else {}
             edge_data['attributes'] = json.dumps(attributes)
         else:
-            edge_data.update(edge.attributes or {})
+            # Serialize complex attributes for Neo4j compatibility
+            serialized_attributes = serialize_attributes_for_neo4j(edge.attributes or {})
+            edge_data.update(serialized_attributes)
 
         edges.append(edge_data)
 

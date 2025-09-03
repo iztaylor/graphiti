@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 class ZepGraphiti(Graphiti):
     def __init__(self, uri: str, user: str, password: str, llm_client: LLMClient | None = None, embedder: EmbedderClient | None = None, cross_encoder: CrossEncoderClient | None = None):
-        super().__init__(uri, user, password, llm_client, embedder, cross_encoder)
+        super().__init__(uri, user, password, llm_client, embedder=embedder, cross_encoder=cross_encoder)
 
     async def save_entity_node(self, name: str, uuid: str, group_id: str, summary: str = ''):
         new_node = EntityNode(
@@ -78,17 +78,35 @@ class ZepGraphiti(Graphiti):
 
 
 async def get_graphiti(settings: ZepEnvDep):
+    llm_config = LLMConfig(
+        model=settings.model_name,
+        small_model=settings.small_model_name,
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url,
+    )
+    llm_client = OpenAIGenericClient(llm_config)
+    embedder = OpenAIEmbedder(
+        config=OpenAIEmbedderConfig(
+            api_key=settings.openai_api_key,
+            embedding_model=settings.embedding_model_name, # e.g., "mistral-embed"
+            base_url=settings.openai_base_url,
+        )#, client=llm_client
+    )
+    cross_encoder = OpenAIRerankerClient(
+        config=LLMConfig(
+            api_key=settings.openai_api_key,
+            model=settings.small_model_name,  # Use smaller model for reranking
+            base_url=settings.openai_base_url,
+        )
+    )
     client = ZepGraphiti(
         uri=settings.neo4j_uri,
         user=settings.neo4j_user,
         password=settings.neo4j_password,
+        llm_client=llm_client,
+        embedder=embedder,
+        cross_encoder=cross_encoder,
     )
-    if settings.openai_base_url is not None:
-        client.llm_client.config.base_url = settings.openai_base_url
-    if settings.openai_api_key is not None:
-        client.llm_client.config.api_key = settings.openai_api_key
-    if settings.model_name is not None:
-        client.llm_client.model = settings.model_name
 
     try:
         yield client
@@ -104,14 +122,14 @@ async def initialize_graphiti(settings: ZepEnvDep):
         base_url=settings.openai_base_url,
     )
     llm_client = OpenAIGenericClient(llm_config)
-    embedder=OpenAIEmbedder(
+    embedder = OpenAIEmbedder(
         config=OpenAIEmbedderConfig(
             api_key=settings.openai_api_key,
             embedding_model=settings.embedding_model_name, # e.g., "mistral-embed"
             base_url=settings.openai_base_url,
-        )
-    ),
-    cross_encoder=OpenAIRerankerClient(
+        )#, client=llm_client
+    )
+    cross_encoder = OpenAIRerankerClient(
         config=LLMConfig(
             api_key=settings.openai_api_key,
             model=settings.small_model_name,  # Use smaller model for reranking

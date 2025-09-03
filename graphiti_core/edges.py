@@ -296,7 +296,12 @@ class EntityEdge(Edge):
                 **edge_data,
             )
         else:
-            edge_data.update(self.attributes or {})
+            # Import the serialization function locally to avoid circular imports
+            from graphiti_core.utils.bulk_utils import serialize_attributes_for_neo4j
+            
+            # Serialize complex attributes for Neo4j compatibility
+            serialized_attributes = serialize_attributes_for_neo4j(self.attributes or {})
+            edge_data.update(serialized_attributes)
 
             if driver.provider == GraphProvider.NEPTUNE:
                 driver.save_to_aoss('edge_name_and_fact', [edge_data])  # pyright: ignore reportAttributeAccessIssue

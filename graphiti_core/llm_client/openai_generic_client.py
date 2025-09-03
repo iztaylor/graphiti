@@ -99,13 +99,22 @@ class OpenAIGenericClient(LLMClient):
             elif m.role == 'system':
                 openai_messages.append({'role': 'system', 'content': m.content})
         try:
-            response = await self.client.chat.completions.create(
-                model=self.model or DEFAULT_MODEL,
-                messages=openai_messages,
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-                response_format={'type': 'json_object'},
-            )
+            # Prepare request parameters
+            kwargs = {
+                'model': self.model or DEFAULT_MODEL,
+                'messages': openai_messages,
+                'max_tokens': self.max_tokens,
+                'response_format': {'type': 'json_object'},
+            }
+            
+            # Only include temperature if the model supports it (GPT-5 models don't)
+            if not (self.model or DEFAULT_MODEL).startswith('gpt-5'):
+                kwargs['temperature'] = self.temperature
+            else:
+                # GPT-5 models use reasoning_effort instead of temperature
+                kwargs['reasoning_effort'] = 'minimal'
+            
+            response = await self.client.chat.completions.create(**kwargs)
             result = response.choices[0].message.content or ''
             return json.loads(result)
         except openai.RateLimitError as e:

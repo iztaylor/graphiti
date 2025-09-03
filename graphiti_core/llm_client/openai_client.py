@@ -73,16 +73,27 @@ class OpenAIClient(BaseOpenAIClient):
         verbosity: str | None = None,
     ):
         """Create a structured completion using OpenAI's beta parse API."""
-        response = await self.client.responses.parse(
-            model=model,
-            input=messages,  # type: ignore
-            temperature=temperature,
-            max_output_tokens=max_tokens,
-            text_format=response_model,  # type: ignore
-            reasoning={'effort': reasoning} if reasoning is not None else None,  # type: ignore
-            text={'verbosity': verbosity} if verbosity is not None else None,  # type: ignore
-        )
+        
+        kwargs = {
+            "model": model,
+            "input": messages,  # type: ignore
+            "max_output_tokens": max_tokens,
+            "text_format": response_model,  # type: ignore
+        }
 
+        if model.startswith("gpt-5"):
+            # GPT-5 models don't support temperature; use reasoning instead
+            kwargs["reasoning"] = {"effort": reasoning or "minimal"}
+            if verbosity is not None:
+                kwargs["text"] = {"verbosity": verbosity}
+        else:
+            kwargs["temperature"] = temperature
+            if reasoning is not None:
+                kwargs["reasoning"] = {"effort": reasoning}
+            if verbosity is not None:
+                kwargs["text"] = {"verbosity": verbosity}
+
+        response = await self.client.responses.parse(**kwargs)
         return response
 
     async def _create_completion(
@@ -96,10 +107,18 @@ class OpenAIClient(BaseOpenAIClient):
         verbosity: str | None = None,
     ):
         """Create a regular completion with JSON format."""
-        return await self.client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            response_format={'type': 'json_object'},
-        )
+        
+        kwargs = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "response_format": {"type": "json_object"},
+        }
+
+        if model.startswith("gpt-5"):
+            # GPT-5 models don't support temperature; use reasoning_effort instead
+            kwargs["reasoning_effort"] = "minimal"
+        else:
+            kwargs["temperature"] = temperature
+
+        return await self.client.chat.completions.create(**kwargs)

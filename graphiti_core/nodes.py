@@ -464,7 +464,12 @@ class EntityNode(Node):
                 **entity_data,
             )
         else:
-            entity_data.update(self.attributes or {})
+            # Import the serialization function locally to avoid circular imports
+            from graphiti_core.utils.bulk_utils import serialize_attributes_for_neo4j
+            
+            # Serialize complex attributes for Neo4j compatibility
+            serialized_attributes = serialize_attributes_for_neo4j(self.attributes or {})
+            entity_data.update(serialized_attributes)
             labels = ':'.join(self.labels + ['Entity', 'Entity_' + self.group_id.replace('-', '')])
 
             if driver.provider == GraphProvider.NEPTUNE:
