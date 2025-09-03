@@ -126,7 +126,13 @@ async def extract_nodes(
                 prompt_library.extract_nodes.extract_json(context), response_model=ExtractedEntities
             )
 
-        response_object = ExtractedEntities(**llm_response)
+        try:
+            response_object = ExtractedEntities(**llm_response)
+        except Exception as e:
+            logger.error(f'Failed to parse ExtractedEntities from LLM response: {e}')
+            logger.error(f'LLM response content: {llm_response}')
+            logger.error(f'Episode content: {episode.content[:500]}...' if len(episode.content) > 500 else f'Episode content: {episode.content}')
+            raise
 
         extracted_entities: list[ExtractedEntity] = response_object.extracted_entities
 

@@ -18,7 +18,7 @@ import logging
 from datetime import datetime
 from time import time
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphDriver, GraphProvider
@@ -162,7 +162,13 @@ async def extract_edges(
             response_model=ExtractedEdges,
             max_tokens=extract_edges_max_tokens,
         )
-        edges_data = ExtractedEdges(**llm_response).edges
+        
+        try:
+            edges_data = ExtractedEdges(**llm_response).edges
+        except ValidationError as e:
+            logger.warning(f'WARNING: Error validating LLM response for edge extraction: {e}. Response: {llm_response}')
+            # Fallback to empty edges list if validation fails
+            edges_data = []
 
         context['extracted_facts'] = [edge_data.fact for edge_data in edges_data]
 
@@ -426,8 +432,19 @@ async def resolve_extracted_edge(
         response_model=EdgeDuplicate,
         model_size=ModelSize.small,
     )
-    response_object = EdgeDuplicate(**llm_response)
-    duplicate_facts = response_object.duplicate_facts
+    
+    try:
+        response_object = EdgeDuplicate(**llm_response)
+        duplicate_facts = response_object.duplicate_facts
+    except ValidationError as e:
+        logger.warning(f'WARNING: Error validating LLM response for edge duplicate detection: {e}. Response: {llm_response}')
+        # Fallback to safe defaults if validation fails
+        response_object = EdgeDuplicate(
+            duplicate_facts=[],
+            contradicted_facts=[],
+            fact_type='DEFAULT'
+        )
+        duplicate_facts = []
 
     duplicate_fact_ids: list[int] = [i for i in duplicate_facts if 0 <= i < len(related_edges)]
 
