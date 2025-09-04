@@ -168,3 +168,5 @@ cache.db*
 .DS_Store
 examples/KubeApps/run.ps1
 examples/KubeApps/apps.json
+examples/tc_info/run.ps1
+examples/tc_info/data.json
