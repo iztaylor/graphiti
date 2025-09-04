@@ -84,6 +84,114 @@ class OpenAIGenericClient(LLMClient):
         else:
             self.client = client
 
+    def _is_schema_structure(self, obj: dict) -> bool:
+        """Check if a dictionary represents a JSON schema structure."""
+        schema_indicators = {
+            'type', 'anyOf', 'oneOf', 'allOf', 'properties', 'items', 
+            'description', 'title', 'default', '$schema', 'definitions'
+        }
+        return isinstance(obj, dict) and any(key in schema_indicators for key in obj.keys())
+
+    def _extract_value_from_schema_structure(self, schema: dict) -> typing.Any:
+        """Extract a usable value from a JSON schema structure."""
+        # Try to get the default value first
+        if 'default' in schema:
+            logger.info(f"Extracting default value: {schema['default']}")
+            return schema['default']
+        
+        # Special case: if this looks like a summary field and description contains the actual content
+        # (not just a field description), use the description as the value
+        if ('title' in schema and schema.get('title', '').lower() == 'summary' and 
+            'description' in schema and 'type' in schema and schema['type'] == 'string'):
+            description = schema['description']
+            # Check if description looks like actual content rather than a field description
+            if (len(description) > 50 and not description.lower().startswith('summary') and 
+                not description.lower().startswith('description')):
+                logger.info(f"Extracting summary content from description: {description[:100]}...")
+                return description
+        
+        # If no default, try to infer from type
+        if 'type' in schema:
+            schema_type = schema['type']
+            if schema_type == 'string':
+                return ""
+            elif schema_type == 'integer':
+                return 0
+            elif schema_type == 'number':
+                return 0.0
+            elif schema_type == 'boolean':
+                return False
+            elif schema_type == 'array':
+                return []
+            elif schema_type == 'object':
+                return {}
+        
+        # Handle anyOf, oneOf patterns
+        if 'anyOf' in schema and isinstance(schema['anyOf'], list):
+            for option in schema['anyOf']:
+                if isinstance(option, dict) and 'default' in option:
+                    logger.info(f"Extracting anyOf default value: {option['default']}")
+                    return option['default']
+                if isinstance(option, dict) and 'type' in option:
+                    if option['type'] != 'null':  # Prefer non-null types
+                        return self._extract_value_from_schema_structure(option)
+        
+        if 'oneOf' in schema and isinstance(schema['oneOf'], list):
+            for option in schema['oneOf']:
+                if isinstance(option, dict) and 'default' in option:
+                    logger.info(f"Extracting oneOf default value: {option['default']}")
+                    return option['default']
+                if isinstance(option, dict) and 'type' in option:
+                    if option['type'] != 'null':  # Prefer non-null types
+                        return self._extract_value_from_schema_structure(option)
+        
+        # If all else fails, return None
+        logger.warning(f"Could not extract value from schema, returning None: {schema}")
+        return None
+
+    def _clean_schema_response(self, response: dict) -> dict:
+        """Recursively clean schema structures from the response."""
+        cleaned_response = {}
+        
+        for key, value in response.items():
+            if isinstance(value, dict):
+                # Check if this dict is a schema structure
+                if self._is_schema_structure(value):
+                    # Found a schema structure - extract the actual value
+                    extracted_value = self._extract_value_from_schema_structure(value)
+                    cleaned_response[key] = extracted_value
+                    logger.info(f"Found schema structure for '{key}', extracted: {extracted_value}")
+                else:
+                    # Check for nested schema structures (like in 'properties' field)
+                    if key == 'properties' and isinstance(value, dict):
+                        # This is likely a schema properties object, extract the actual values
+                        extracted_properties = {}
+                        for prop_key, prop_value in value.items():
+                            if isinstance(prop_value, dict) and self._is_schema_structure(prop_value):
+                                extracted_val = self._extract_value_from_schema_structure(prop_value)
+                                extracted_properties[prop_key] = extracted_val
+                                logger.info(f"Found nested schema in properties for '{prop_key}', extracted: {extracted_val}")
+                            else:
+                                extracted_properties[prop_key] = prop_value
+                        # Return the extracted properties directly instead of nesting under 'properties'
+                        cleaned_response.update(extracted_properties)
+                    else:
+                        # Recursively clean nested dicts
+                        cleaned_response[key] = self._clean_schema_response(value)
+            elif isinstance(value, list):
+                # Clean lists that might contain schema structures
+                cleaned_list = []
+                for item in value:
+                    if isinstance(item, dict):
+                        cleaned_list.append(self._clean_schema_response(item))
+                    else:
+                        cleaned_list.append(item)
+                cleaned_response[key] = cleaned_list
+            else:
+                cleaned_response[key] = value
+        
+        return cleaned_response
+
     async def _generate_response(
         self,
         messages: list[Message],
@@ -91,6 +199,7 @@ class OpenAIGenericClient(LLMClient):
         max_tokens: int = DEFAULT_MAX_TOKENS,
         model_size: ModelSize = ModelSize.medium,
     ) -> dict[str, typing.Any]:
+        logger.info(f"OpenAI Generic Client _generate_response called with {len(messages)} messages")
         openai_messages: list[ChatCompletionMessageParam] = []
         for m in messages:
             m.content = self._clean_input(m.content)
@@ -152,6 +261,12 @@ class OpenAIGenericClient(LLMClient):
                 response = await self._generate_response(
                     messages, response_model, max_tokens=max_tokens, model_size=model_size
                 )
+                # Clean any schema structures from the response
+                logger.info(f"OpenAI Generic Client - Raw response: {response}")
+                if isinstance(response, dict):
+                    cleaned_response = self._clean_schema_response(response)
+                    logger.info(f"OpenAI Generic Client - Cleaned response: {cleaned_response}")
+                    return cleaned_response
                 return response
             except (RateLimitError, RefusalError):
                 # These errors should not trigger retries
