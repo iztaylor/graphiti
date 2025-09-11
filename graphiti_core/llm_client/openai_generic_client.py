@@ -29,9 +29,23 @@ from .client import MULTILINGUAL_EXTRACTION_RESPONSES, LLMClient
 from .config import DEFAULT_MAX_TOKENS, LLMConfig, ModelSize
 from .errors import RateLimitError, RefusalError
 
+# Import trace context utility
+try:
+    from graphiti_core.utils.trace_context import TraceContext
+    TRACE_AVAILABLE = True
+except ImportError:
+    TRACE_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = 'gpt-4.1-mini'
+
+
+def _get_trace_logger():
+    """Get a trace-aware logger if available, otherwise return the regular logger."""
+    if TRACE_AVAILABLE:
+        return TraceContext.get_logger_with_trace(__name__)
+    return logger
 
 
 class OpenAIGenericClient(LLMClient):
@@ -160,7 +174,7 @@ class OpenAIGenericClient(LLMClient):
                     # Found a schema structure - extract the actual value
                     extracted_value = self._extract_value_from_schema_structure(value)
                     cleaned_response[key] = extracted_value
-                    logger.info(f"Found schema structure for '{key}', extracted: {extracted_value}")
+                    _get_trace_logger().info(f"Found schema structure for '{key}', extracted: {extracted_value}")
                 else:
                     # Check for nested schema structures (like in 'properties' field)
                     if key == 'properties' and isinstance(value, dict):
@@ -170,7 +184,7 @@ class OpenAIGenericClient(LLMClient):
                             if isinstance(prop_value, dict) and self._is_schema_structure(prop_value):
                                 extracted_val = self._extract_value_from_schema_structure(prop_value)
                                 extracted_properties[prop_key] = extracted_val
-                                logger.info(f"Found nested schema in properties for '{prop_key}', extracted: {extracted_val}")
+                                _get_trace_logger().info(f"Found nested schema in properties for '{prop_key}', extracted: {extracted_val}")
                             else:
                                 extracted_properties[prop_key] = prop_value
                         # Return the extracted properties directly instead of nesting under 'properties'
@@ -199,7 +213,8 @@ class OpenAIGenericClient(LLMClient):
         max_tokens: int = DEFAULT_MAX_TOKENS,
         model_size: ModelSize = ModelSize.medium,
     ) -> dict[str, typing.Any]:
-        logger.info(f"OpenAI Generic Client _generate_response called with {len(messages)} messages")
+        trace_logger = _get_trace_logger()
+        trace_logger.info(f"OpenAI Generic Client _generate_response called with {len(messages)} messages")
         openai_messages: list[ChatCompletionMessageParam] = []
         for m in messages:
             m.content = self._clean_input(m.content)
@@ -262,10 +277,12 @@ class OpenAIGenericClient(LLMClient):
                     messages, response_model, max_tokens=max_tokens, model_size=model_size
                 )
                 # Clean any schema structures from the response
-                logger.info(f"OpenAI Generic Client - Raw response: {response}")
+                trace_logger = _get_trace_logger()
+                trace_logger.info(f"OpenAI Generic Client - Raw response: {response}")
+                    
                 if isinstance(response, dict):
                     cleaned_response = self._clean_schema_response(response)
-                    logger.info(f"OpenAI Generic Client - Cleaned response: {cleaned_response}")
+                    trace_logger.info(f"OpenAI Generic Client - Cleaned response: {cleaned_response}")
                     return cleaned_response
                 return response
             except (RateLimitError, RefusalError):

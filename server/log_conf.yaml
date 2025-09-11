@@ -2,15 +2,9 @@ version: 1
 disable_existing_loggers: False
 formatters:
   default:
-    "()": uvicorn.logging.ColourizedFormatter
-    format: '{asctime} [{name:<16}] {levelprefix} | {message}'
-    use_colors: true,
-    style: "{"
+    "()": graph_service.json_formatter.JSONFormatter
   access:
-    "()": uvicorn.logging.ColourizedFormatter
-    format: '{asctime} [{name:<16}] {levelprefix} | {client_addr} - \"{request_line}\" {status_code}'
-    use_colors: true,
-    style: "{"
+    "()": graph_service.json_formatter.UvicornAccessJSONFormatter
 handlers:
   default:
     formatter: default

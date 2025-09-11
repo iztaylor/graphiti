@@ -17,6 +17,7 @@ limitations under the License.
 import logging
 from datetime import datetime
 from time import time
+from typing import Optional
 
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -98,6 +99,7 @@ from graphiti_core.utils.maintenance.node_operations import (
     resolve_extracted_nodes,
 )
 from graphiti_core.utils.ontology_utils.entity_types_utils import validate_entity_types
+from graphiti_core.utils.trace_context import TraceContext
 
 logger = logging.getLogger(__name__)
 
@@ -398,6 +400,8 @@ class Graphiti:
         previous_episode_uuids: list[str] | None = None,
         edge_types: dict[str, type[BaseModel]] | None = None,
         edge_type_map: dict[tuple[str, str], list[str]] | None = None,
+        trace_id: Optional[str] = None,
+        span_id: Optional[str] = None,
     ) -> AddEpisodeResults:
         """
         Process an episode and update the graph.
@@ -455,6 +459,14 @@ class Graphiti:
                 return {"message": "Episode processing started"}
         """
         try:
+            # Set trace context if provided
+            if trace_id and span_id:
+                TraceContext.set_trace_context(trace_id, span_id)
+            
+            # Get logger with trace context
+            trace_logger = TraceContext.get_logger_with_trace(__name__)
+            trace_logger.info(f"Starting add_episode: {name}")
+            
             start = time()
             now = utc_now()
 
@@ -572,7 +584,7 @@ class Graphiti:
                     max_coroutines=self.max_coroutines,
                 )
             end = time()
-            logger.info(f'Completed add_episode in {(end - start) * 1000} ms')
+            trace_logger.info(f'Completed add_episode in {(end - start) * 1000} ms')
 
             return AddEpisodeResults(
                 episode=episode,
@@ -594,7 +606,10 @@ class Graphiti:
         excluded_entity_types: list[str] | None = None,
         edge_types: dict[str, type[BaseModel]] | None = None,
         edge_type_map: dict[tuple[str, str], list[str]] | None = None,
+        trace_id: Optional[str] = None,
+        span_id: Optional[str] = None,
     ) -> AddBulkEpisodeResults:
+    
         """
         Process multiple episodes in bulk and update the graph.
 
@@ -632,9 +647,16 @@ class Graphiti:
         individual episode.
         """
         try:
+            # Set trace context if provided
+            if trace_id and span_id:
+                TraceContext.set_trace_context(trace_id, span_id)
+            
+            # Get logger with trace context
+            trace_logger = TraceContext.get_logger_with_trace(__name__)
+            
             start = time()
             now = utc_now()
-            logger.info(f'Starting add_episode_bulk with {len(bulk_episodes)} episodes')
+            trace_logger.info(f'Starting add_episode_bulk with {len(bulk_episodes)} episodes')
 
             # if group_id is None, use the default group id by the provider
             group_id = group_id or get_default_group_id(self.driver.provider)
@@ -676,7 +698,7 @@ class Graphiti:
                 entity_edges=[],
                 embedder=self.embedder,
             )
-            logger.info(f'Added nodes and edges for {len(episodes)} episodes')
+            trace_logger.info(f'Added nodes and edges for {len(episodes)} episodes')
 
             # Get previous episode context for each episode
             episode_context = await retrieve_previous_episodes_bulk(self.driver, episodes)
@@ -690,7 +712,7 @@ class Graphiti:
                 entity_types=entity_types,
                 excluded_entity_types=excluded_entity_types,
             )
-            logger.info(f'Extracted nodes and edges, starting deduplication for {len(episodes)} episodes')
+            trace_logger.info(f'Extracted nodes and edges, starting deduplication for {len(episodes)} episodes')
             # Dedupe extracted nodes in memory
             nodes_by_episode, uuid_map = await dedupe_nodes_bulk(
                 self.clients, extracted_nodes_bulk, episode_context, entity_types
@@ -852,7 +874,7 @@ class Graphiti:
             # Resolved pointers for episodic edges
             resolved_episodic_edges = resolve_edge_pointers(episodic_edges, uuid_map)
 
-            logger.info(f'Saving {len(resolved_edges + invalidated_edges)} edges for {len(episodes)} episodes')
+            trace_logger.info(f'Saving {len(resolved_edges + invalidated_edges)} edges for {len(episodes)} episodes')
 
             # save data to KG
             await add_nodes_and_edges_bulk(
@@ -865,7 +887,7 @@ class Graphiti:
             )
 
             end = time()
-            logger.info(f'Completed add_episode_bulk in {(end - start) * 1000} ms')
+            trace_logger.info(f'Completed add_episode_bulk in {(end - start) * 1000} ms')
 
             return AddBulkEpisodeResults(
                 episodes=episodes,
@@ -919,6 +941,8 @@ class Graphiti:
         group_ids: list[str] | None = None,
         num_results=DEFAULT_SEARCH_LIMIT,
         search_filter: SearchFilters | None = None,
+        trace_id: Optional[str] = None,
+        span_id: Optional[str] = None,
     ) -> list[EntityEdge]:
         """
         Perform a hybrid search on the knowledge graph.
@@ -953,6 +977,14 @@ class Graphiti:
         The search is performed using the current date and time as the reference
         point for temporal relevance.
         """
+        # Set trace context if provided
+        if trace_id and span_id:
+            TraceContext.set_trace_context(trace_id, span_id)
+        
+        # Get logger with trace context
+        trace_logger = TraceContext.get_logger_with_trace(__name__)
+        trace_logger.info(f"Starting search with query: {query[:100]}...")
+        
         search_config = (
             EDGE_HYBRID_SEARCH_RRF if center_node_uuid is None else EDGE_HYBRID_SEARCH_NODE_DISTANCE
         )
@@ -968,6 +1000,8 @@ class Graphiti:
                 center_node_uuid,
             )
         ).edges
+        
+        trace_logger.info(f"Search completed, found {len(edges)} edges")
 
         return edges
 
