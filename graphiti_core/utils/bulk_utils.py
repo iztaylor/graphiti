@@ -155,7 +155,6 @@ async def add_nodes_and_edges_bulk_tx(
     for episode in episodes:
         episode['source'] = str(episode['source'].value)
         episode.pop('labels', None)
-        episode['group_label'] = 'Episodic_' + episode['group_id'].replace('-', '')
 
     nodes = []
 
@@ -180,9 +179,6 @@ async def add_nodes_and_edges_bulk_tx(
             # Serialize complex attributes for Neo4j compatibility
             serialized_attributes = serialize_attributes_for_neo4j(node.attributes or {})
             entity_data.update(serialized_attributes)
-            entity_data['labels'] = list(
-                set(node.labels + ['Entity', 'Entity_' + node.group_id.replace('-', '')])
-            )
 
         nodes.append(entity_data)
 
@@ -231,12 +227,25 @@ async def add_nodes_and_edges_bulk_tx(
             await tx.run(episodic_edge_query, **edge.model_dump())
     else:
         await tx.run(get_episode_node_save_bulk_query(driver.provider), episodes=episodes)
-        await tx.run(get_entity_node_save_bulk_query(driver.provider, nodes), nodes=nodes)
+        await tx.run(
+            get_entity_node_save_bulk_query(driver.provider, nodes),
+            nodes=nodes,
+            has_aoss=bool(driver.aoss_client),
+        )
         await tx.run(
             get_episodic_edge_save_bulk_query(driver.provider),
             episodic_edges=[edge.model_dump() for edge in episodic_edges],
         )
-        await tx.run(get_entity_edge_save_bulk_query(driver.provider), entity_edges=edges)
+        await tx.run(
+            get_entity_edge_save_bulk_query(driver.provider),
+            entity_edges=edges,
+            has_aoss=bool(driver.aoss_client),
+        )
+
+        if driver.aoss_client:
+            driver.save_to_aoss('episodes', episodes)
+            driver.save_to_aoss('entities', nodes)
+            driver.save_to_aoss('entity_edges', edges)
 
 
 async def extract_nodes_and_edges_bulk(

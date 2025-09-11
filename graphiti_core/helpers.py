@@ -26,7 +26,6 @@ from dotenv import load_dotenv
 from neo4j import time as neo4j_time
 from numpy._typing import NDArray
 from pydantic import BaseModel
-from typing_extensions import LiteralString
 
 from graphiti_core.driver.driver import GraphProvider
 from graphiti_core.errors import GroupIdValidationError
@@ -37,10 +36,6 @@ USE_PARALLEL_RUNTIME = bool(os.getenv('USE_PARALLEL_RUNTIME', False))
 SEMAPHORE_LIMIT = int(os.getenv('SEMAPHORE_LIMIT', 20))
 MAX_REFLEXION_ITERATIONS = int(os.getenv('MAX_REFLEXION_ITERATIONS', 0))
 DEFAULT_PAGE_LIMIT = 20
-
-RUNTIME_QUERY: LiteralString = (
-    'CYPHER runtime = parallel parallelRuntimeSupport=all\n' if USE_PARALLEL_RUNTIME else ''
-)
 
 
 def parse_db_date(input_date: neo4j_time.DateTime | str | None) -> datetime | None:
