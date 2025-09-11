@@ -273,31 +273,26 @@ class EpisodicNode(Node):
     )
 
     async def save(self, driver: GraphDriver):
-        if driver.provider == GraphProvider.NEPTUNE:
+        episode_args = {
+            'uuid': self.uuid,
+            'name': self.name,
+            'group_id': self.group_id,
+            'source_description': self.source_description,
+            'content': self.content,
+            'entity_edges': self.entity_edges,
+            'created_at': self.created_at,
+            'valid_at': self.valid_at,
+            'source': self.source.value,
+        }
+
+        if driver.aoss_client:
             driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
-                'episode_content',
-                [
-                    {
-                        'uuid': self.uuid,
-                        'group_id': self.group_id,
-                        'source': self.source.value,
-                        'content': self.content,
-                        'source_description': self.source_description,
-                    }
-                ],
+                'episodes',
+                [episode_args],
             )
+
         result = await driver.execute_query(
-            get_episode_node_save_query(driver.provider),
-            uuid=self.uuid,
-            name=self.name,
-            group_id=self.group_id,
-            group_label='Episodic_' + self.group_id.replace('-', ''),
-            source_description=self.source_description,
-            content=self.content,
-            entity_edges=self.entity_edges,
-            created_at=self.created_at,
-            valid_at=self.valid_at,
-            source=self.source.value,
+            get_episode_node_save_query(driver.provider), **episode_args
         )
 
         logger.debug(f'Saved Node to Graph: {self.uuid}')
@@ -430,6 +425,22 @@ class EntityNode(Node):
                 MATCH (n:Entity {uuid: $uuid})
                 RETURN [x IN split(n.name_embedding, ",") | toFloat(x)] as name_embedding
             """
+        elif driver.aoss_client:
+            resp = driver.aoss_client.search(
+                body={
+                    'query': {'multi_match': {'query': self.uuid, 'fields': ['uuid']}},
+                    'size': 1,
+                },
+                index='entities',
+                routing=self.group_id,
+            )
+
+            if resp['hits']['hits']:
+                self.name_embedding = resp['hits']['hits'][0]['_source']['name_embedding']
+                return
+            else:
+                raise NodeNotFoundError(self.uuid)
+
         else:
             query: LiteralString = """
                 MATCH (n:Entity {uuid: $uuid})
@@ -472,11 +483,11 @@ class EntityNode(Node):
             entity_data.update(serialized_attributes)
             labels = ':'.join(self.labels + ['Entity', 'Entity_' + self.group_id.replace('-', '')])
 
-            if driver.provider == GraphProvider.NEPTUNE:
-                driver.save_to_aoss('node_name_and_summary', [entity_data])  # pyright: ignore reportAttributeAccessIssue
+            if driver.aoss_client:
+                driver.save_to_aoss('entities', [entity_data])  # pyright: ignore reportAttributeAccessIssue
 
             result = await driver.execute_query(
-                get_entity_node_save_query(driver.provider, labels),
+                get_entity_node_save_query(driver.provider, labels, bool(driver.aoss_client)),
                 entity_data=entity_data,
             )
 
@@ -572,7 +583,7 @@ class CommunityNode(Node):
     async def save(self, driver: GraphDriver):
         if driver.provider == GraphProvider.NEPTUNE:
             driver.save_to_aoss(  # pyright: ignore reportAttributeAccessIssue
-                'community_name',
+                'communities',
                 [{'name': self.name, 'uuid': self.uuid, 'group_id': self.group_id}],
             )
         result = await driver.execute_query(
@@ -741,12 +752,17 @@ def get_entity_node_from_record(record: Any, provider: GraphProvider) -> EntityN
         attributes.pop('created_at', None)
         attributes.pop('labels', None)
 
+    labels = record.get('labels', [])
+    group_id = record.get('group_id')
+    if 'Entity_' + group_id.replace('-', '') in labels:
+        labels.remove('Entity_' + group_id.replace('-', ''))
+
     entity_node = EntityNode(
         uuid=record['uuid'],
         name=record['name'],
         name_embedding=record.get('name_embedding'),
-        group_id=record['group_id'],
-        labels=record['labels'],
+        group_id=group_id,
+        labels=labels,
         created_at=parse_db_date(record['created_at']),  # type: ignore
         summary=record['summary'],
         attributes=attributes,
