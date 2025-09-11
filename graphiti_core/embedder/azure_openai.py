@@ -19,7 +19,7 @@ from typing import Any
 
 from openai import AsyncAzureOpenAI
 
-from .client import EmbedderClient
+from .client import EmbedderClient, EmbedderConfig
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +27,10 @@ logger = logging.getLogger(__name__)
 class AzureOpenAIEmbedderClient(EmbedderClient):
     """Wrapper class for AsyncAzureOpenAI that implements the EmbedderClient interface."""
 
-    def __init__(self, azure_client: AsyncAzureOpenAI, model: str = 'text-embedding-3-small'):
+    def __init__(self, azure_client: AsyncAzureOpenAI, model: str = 'text-embedding-3-small', config: EmbedderConfig | None = None):
         self.azure_client = azure_client
         self.model = model
+        self.config = config or EmbedderConfig()
 
     async def create(self, input_data: str | list[str] | Any) -> list[float]:
         """Create embeddings using Azure OpenAI client."""
@@ -45,8 +46,9 @@ class AzureOpenAIEmbedderClient(EmbedderClient):
 
             response = await self.azure_client.embeddings.create(model=self.model, input=text_input)
 
-            # Return the first embedding as a list of floats
-            return response.data[0].embedding
+            # Return the first embedding as a list of floats, truncated to the configured dimension
+            embedding = response.data[0].embedding
+            return embedding[: self.config.embedding_dim]
         except Exception as e:
             logger.error(f'Error in Azure OpenAI embedding: {e}')
             raise
@@ -58,7 +60,7 @@ class AzureOpenAIEmbedderClient(EmbedderClient):
                 model=self.model, input=input_data_list
             )
 
-            return [embedding.embedding for embedding in response.data]
+            return [embedding.embedding[: self.config.embedding_dim] for embedding in response.data]
         except Exception as e:
             logger.error(f'Error in Azure OpenAI batch embedding: {e}')
             raise
