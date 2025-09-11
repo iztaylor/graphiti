@@ -21,7 +21,6 @@ from pydantic import BaseModel, Field
 from graphiti_core import Graphiti
 from graphiti_core.edges import EntityEdge
 from graphiti_core.embedder.azure_openai import AzureOpenAIEmbedderClient
-from graphiti_core.embedder.client import EmbedderConfig
 from graphiti_core.embedder.client import EmbedderClient
 from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
 from graphiti_core.llm_client import LLMClient
@@ -359,7 +358,6 @@ class GraphitiEmbedderConfig(BaseModel):
     azure_openai_deployment_name: str | None = None
     azure_openai_api_version: str | None = None
     azure_openai_use_managed_identity: bool = False
-    embedding_dim: int = 1024
 
     @classmethod
     def from_env(cls) -> 'GraphitiEmbedderConfig':
@@ -368,21 +366,6 @@ class GraphitiEmbedderConfig(BaseModel):
         # Get model from environment, or use default if not set or empty
         model_env = os.environ.get('EMBEDDER_MODEL_NAME', '')
         model = model_env if model_env.strip() else DEFAULT_EMBEDDER_MODEL
-        
-        # For Azure OpenAI, also check the deployment name which might contain the actual model name
-        azure_deployment_name = os.environ.get('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME', None)
-        if azure_deployment_name:
-            # Use deployment name as model name for Azure OpenAI
-            model = azure_deployment_name
-        
-        # Set embedding dimension based on model or environment variable
-        embedding_dim = int(os.environ.get('EMBEDDING_DIM', '1024'))
-        if model == 'text-embedding-3-large':
-            # text-embedding-3-large produces 3072-dimensional vectors
-            embedding_dim = 3072
-        elif model == 'text-embedding-3-small':
-            # text-embedding-3-small produces 1536-dimensional vectors  
-            embedding_dim = 1536
 
         azure_openai_endpoint = os.environ.get('AZURE_OPENAI_EMBEDDING_ENDPOINT', None)
         azure_openai_api_version = os.environ.get('AZURE_OPENAI_EMBEDDING_API_VERSION', None)
@@ -415,19 +398,16 @@ class GraphitiEmbedderConfig(BaseModel):
                 api_key = None
 
             return cls(
-                model=model,
                 azure_openai_use_managed_identity=azure_openai_use_managed_identity,
                 azure_openai_endpoint=azure_openai_endpoint,
                 api_key=api_key,
                 azure_openai_api_version=azure_openai_api_version,
                 azure_openai_deployment_name=azure_openai_deployment_name,
-                embedding_dim=embedding_dim,
             )
         else:
             return cls(
                 model=model,
                 api_key=os.environ.get('OPENAI_API_KEY'),
-                embedding_dim=embedding_dim,
             )
 
     def create_client(self) -> EmbedderClient | None:
@@ -444,7 +424,6 @@ class GraphitiEmbedderConfig(BaseModel):
                         azure_ad_token_provider=token_provider,
                     ),
                     model=self.model,
-                    config=EmbedderConfig(embedding_dim=self.embedding_dim),
                 )
             elif self.api_key:
                 # Use API key for authentication
@@ -456,7 +435,6 @@ class GraphitiEmbedderConfig(BaseModel):
                         api_key=self.api_key,
                     ),
                     model=self.model,
-                    config=EmbedderConfig(embedding_dim=self.embedding_dim),
                 )
             else:
                 logger.error('OPENAI_API_KEY must be set when using Azure OpenAI API')
@@ -466,11 +444,7 @@ class GraphitiEmbedderConfig(BaseModel):
             if not self.api_key:
                 return None
 
-            embedder_config = OpenAIEmbedderConfig(
-                api_key=self.api_key, 
-                embedding_model=self.model,
-                embedding_dim=self.embedding_dim
-            )
+            embedder_config = OpenAIEmbedderConfig(api_key=self.api_key, embedding_model=self.model)
 
             return OpenAIEmbedder(config=embedder_config)
 
