@@ -46,7 +46,7 @@ class AzureOpenAIEmbedderClient(EmbedderClient):
             response = await self.azure_client.embeddings.create(model=self.model, input=text_input)
 
             # Return the first embedding as a list of floats
-            return response.data[0].embedding[: 1024]
+            return response.data[0].embedding
         except Exception as e:
             logger.error(f'Error in Azure OpenAI embedding: {e}')
             raise
@@ -58,7 +58,7 @@ class AzureOpenAIEmbedderClient(EmbedderClient):
                 model=self.model, input=input_data_list
             )
 
-            return [embedding.embedding[: 1024] for embedding in response.data]
+            return [embedding.embedding for embedding in response.data]
         except Exception as e:
             logger.error(f'Error in Azure OpenAI batch embedding: {e}')
             raise
