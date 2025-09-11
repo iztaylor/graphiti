@@ -88,8 +88,9 @@ async def get_graphiti(settings: ZepEnvDep):
     embedder = OpenAIEmbedder(
         config=OpenAIEmbedderConfig(
             api_key=settings.openai_api_key,
-            embedding_model=settings.embedding_model_name, # e.g., "mistral-embed"
+            embedding_model=settings.embedding_model_name or "text-embedding-3-large", # e.g., "mistral-embed"
             base_url=settings.openai_base_url,
+            embedding_dim=3072,  # text-embedding-3-large default dimension
         )#, client=llm_client
     )
     cross_encoder = OpenAIRerankerClient(
@@ -125,8 +126,9 @@ async def initialize_graphiti(settings: ZepEnvDep):
     embedder = OpenAIEmbedder(
         config=OpenAIEmbedderConfig(
             api_key=settings.openai_api_key,
-            embedding_model=settings.embedding_model_name, # e.g., "mistral-embed"
+            embedding_model=settings.embedding_model_name or "text-embedding-3-large", # e.g., "mistral-embed"
             base_url=settings.openai_base_url,
+            embedding_dim=3072,  # text-embedding-3-large default dimension
         )#, client=llm_client
     )
     cross_encoder = OpenAIRerankerClient(
