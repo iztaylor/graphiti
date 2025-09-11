@@ -72,8 +72,8 @@ COPY .env* ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
-# Copy our updated openai_generic_client.py file to override the installed version
-COPY ./graphiti_core/llm_client/openai_generic_client.py /app/.venv/lib/python3.12/site-packages/graphiti_core/llm_client/openai_generic_client.py
+# Copy our entire local graphiti_core directory to override any cached/PyPI files
+COPY ./graphiti_core /app/.venv/lib/python3.12/site-packages/graphiti_core
 
 # Change ownership to app user
 RUN chown -R app:app /app
