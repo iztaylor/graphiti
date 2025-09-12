@@ -764,7 +764,7 @@ def get_entity_node_from_record(record: Any, provider: GraphProvider) -> EntityN
         group_id=group_id,
         labels=labels,
         created_at=parse_db_date(record['created_at']),  # type: ignore
-        summary=record.get('summary', ''),
+        summary=record.get('summary', '') or '',
         attributes=attributes,
     )
 
@@ -778,7 +778,7 @@ def get_community_node_from_record(record: Any) -> CommunityNode:
         group_id=record['group_id'],
         name_embedding=record['name_embedding'],
         created_at=parse_db_date(record['created_at']),  # type: ignore
-        summary=record.get('summary', ''),
+        summary=record.get('summary', '') or '',
     )
 
 
