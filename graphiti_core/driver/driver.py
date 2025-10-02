@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from __future__ import annotations
+
 import asyncio
 import copy
 import logging
@@ -189,7 +191,7 @@ class GraphDriver(ABC):
     def delete_all_indexes(self) -> Coroutine:
         raise NotImplementedError()
 
-    def with_database(self, database: str) -> 'GraphDriver':
+    def with_database(self, database: str) -> GraphDriver:
         """
         Returns a shallow copy of this driver with a different default database.
         Reuses the same connection (e.g. FalkorDB, Neo4j).
